@@ -1,0 +1,2225 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "machine_shape": "hm",
+      "gpuType": "L4",
+      "authorship_tag": "ABX9TyPBUouUjxS+wsefLv2yv6+r",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "GPU"
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/jerryk42/SemEval-Food-Hazard-Detection-Challenge/blob/main/Benchmark%20Notebooks\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 35,
+      "metadata": {
+        "id": "-Uk4Hr3o6UHO",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "ab976b06-2e02-493f-d6db-4dfdbaa38a63"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Drive already mounted at /content/drive; to attempt to forcibly remount, call drive.mount(\"/content/drive\", force_remount=True).\n"
+          ]
+        }
+      ],
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/drive')"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 36,
+      "metadata": {
+        "id": "_tnUGj2aOD40"
+      },
+      "outputs": [],
+      "source": [
+        "import pandas as pd\n",
+        "import re\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from sklearn.metrics import f1_score, classification_report\n",
+        "import torch\n",
+        "from transformers import AutoTokenizer, AutoModelForSequenceClassification\n",
+        "from torch.utils.data import DataLoader, Dataset\n",
+        "import torch.nn as nn\n",
+        "import torch.optim as optim\n",
+        "from sklearn.preprocessing import LabelEncoder\n",
+        "from tqdm import tqdm  # Import tqdm for progress bars\n",
+        "import matplotlib.pyplot as plt  # Import matplotlib for plotting\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 37,
+      "metadata": {
+        "id": "mRqpDhY5OF0r"
+      },
+      "outputs": [],
+      "source": [
+        "config = {\n",
+        "    'max_len': 256,\n",
+        "    'batch_size': 16,\n",
+        "    'learning_rate': 0.00005,\n",
+        "    'epochs': 100,\n",
+        "    'model_name': \"dmis-lab/biobert-base-cased-v1.1\"  # BioBERT model name\n",
+        "}\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Set device for training\n",
+        "device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')\n",
+        "print(f\"Using device: {device}\")\n"
+      ],
+      "metadata": {
+        "id": "F8Z5Prdp5Xrb",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "df067682-cefc-4661-c2e6-3636ba6bf7ac"
+      },
+      "execution_count": 38,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Using device: cuda\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 39,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "YaxolIHS5SBH",
+        "outputId": "2c7d291f-8ba3-4635-b7f9-f5cdb418fc68",
+        "collapsed": true
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "   Unnamed: 0  year  month  day country                             title  \\\n",
+            "0           0  1994      1    7      us  Recall Notification: FSIS-024-94   \n",
+            "1           1  1994      3   10      us  Recall Notification: FSIS-033-94   \n",
+            "2           2  1994      3   28      us  Recall Notification: FSIS-014-94   \n",
+            "3           3  1994      4    3      us  Recall Notification: FSIS-009-94   \n",
+            "4           4  1994      7    1      us  Recall Notification: FSIS-001-94   \n",
+            "\n",
+            "                                                text hazard-category  \\\n",
+            "0  Case Number: 024-94   \\n            Date Opene...      biological   \n",
+            "1  Case Number: 033-94   \\n            Date Opene...      biological   \n",
+            "2  Case Number: 014-94   \\n            Date Opene...      biological   \n",
+            "3  Case Number: 009-94   \\n            Date Opene...  foreign bodies   \n",
+            "4  Case Number: 001-94   \\n            Date Opene...  foreign bodies   \n",
+            "\n",
+            "               product-category                  hazard  \\\n",
+            "0  meat, egg and dairy products  listeria monocytogenes   \n",
+            "1  meat, egg and dairy products            listeria spp   \n",
+            "2  meat, egg and dairy products  listeria monocytogenes   \n",
+            "3  meat, egg and dairy products        plastic fragment   \n",
+            "4  meat, egg and dairy products        plastic fragment   \n",
+            "\n",
+            "                       product  \n",
+            "0               smoked sausage  \n",
+            "1                      sausage  \n",
+            "2                   ham slices  \n",
+            "3  thermal processed pork meat  \n",
+            "4               chicken breast  \n"
+          ]
+        }
+      ],
+      "source": [
+        "import pandas as pd\n",
+        "\n",
+        "# URL of the raw file\n",
+        "url = \"https://raw.githubusercontent.com/food-hazard-detection-semeval-2025/food-hazard-detection-semeval-2025.github.io/refs/heads/main/data/incidents_train.csv\"\n",
+        "\n",
+        "# Read the CSV file into a DataFrame\n",
+        "df = pd.read_csv(url)\n",
+        "\n",
+        "# Display the first few rows of the DataFrame\n",
+        "print(df.head())\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Drop the first column\n",
+        "df = df.drop(df.columns[0], axis=1)"
+      ],
+      "metadata": {
+        "id": "Z6l4Gt-Y6EIH"
+      },
+      "execution_count": 40,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Check the structure of the DataFrame\n",
+        "print(df.info())"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "IsoRrUZg5Xw6",
+        "outputId": "65b5bd8b-4441-46bf-c9b7-eac94bd482d9",
+        "collapsed": true
+      },
+      "execution_count": 41,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "<class 'pandas.core.frame.DataFrame'>\n",
+            "RangeIndex: 5082 entries, 0 to 5081\n",
+            "Data columns (total 10 columns):\n",
+            " #   Column            Non-Null Count  Dtype \n",
+            "---  ------            --------------  ----- \n",
+            " 0   year              5082 non-null   int64 \n",
+            " 1   month             5082 non-null   int64 \n",
+            " 2   day               5082 non-null   int64 \n",
+            " 3   country           5082 non-null   object\n",
+            " 4   title             5082 non-null   object\n",
+            " 5   text              5082 non-null   object\n",
+            " 6   hazard-category   5082 non-null   object\n",
+            " 7   product-category  5082 non-null   object\n",
+            " 8   hazard            5082 non-null   object\n",
+            " 9   product           5082 non-null   object\n",
+            "dtypes: int64(3), object(7)\n",
+            "memory usage: 397.2+ KB\n",
+            "None\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 42,
+      "metadata": {
+        "id": "WbqvZzJgOMmA"
+      },
+      "outputs": [],
+      "source": [
+        "# Custom Dataset for Text Data\n",
+        "class TextDataset(Dataset):\n",
+        "    def __init__(self, texts, labels, tokenizer, max_len):\n",
+        "        self.texts = texts\n",
+        "        self.labels = labels\n",
+        "        self.tokenizer = tokenizer\n",
+        "        self.max_len = max_len\n",
+        "\n",
+        "    def __len__(self):\n",
+        "        return len(self.texts)\n",
+        "\n",
+        "    def __getitem__(self, item):\n",
+        "        text = str(self.texts[item])\n",
+        "        label = self.labels[item]\n",
+        "        encoding = self.tokenizer.encode_plus(\n",
+        "            text,\n",
+        "            add_special_tokens=True,\n",
+        "            max_length=self.max_len,\n",
+        "            padding='max_length',\n",
+        "            truncation=True,\n",
+        "            return_tensors='pt'\n",
+        "        )\n",
+        "        return {\n",
+        "            'input_ids': encoding['input_ids'].flatten(),\n",
+        "            'attention_mask': encoding['attention_mask'].flatten(),\n",
+        "            'label': torch.tensor(label, dtype=torch.long)\n",
+        "        }\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 43,
+      "metadata": {
+        "id": "KlHfuLKlOQmI"
+      },
+      "outputs": [],
+      "source": [
+        "# Function to clean text (title or text) and remove stopwords\n",
+        "def clean_text(text):\n",
+        "    text = re.sub(r'[^a-zA-Z0-9\\s]', '', text)\n",
+        "    text = text.lower()\n",
+        "    text = ' '.join(text.split())\n",
+        "    return text\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 44,
+      "metadata": {
+        "id": "J5f2YpcNOVs5"
+      },
+      "outputs": [],
+      "source": [
+        "# Load tokenizer for Microsoft PubMedBERT model\n",
+        "tokenizer = AutoTokenizer.from_pretrained(config['model_name'])\n",
+        "\n",
+        "# Assuming df is your DataFrame\n",
+        "df['title'] = df['title'].apply(clean_text)\n",
+        "df['text'] = df['text'].apply(clean_text)\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 45,
+      "metadata": {
+        "id": "xe4fnbojOY-v"
+      },
+      "outputs": [],
+      "source": [
+        "# Define relevant features and targets\n",
+        "features = ['year', 'month', 'day', 'country']\n",
+        "targets_subtask1 = ['hazard-category','product-category']\n",
+        "targets_subtask2 = ['hazard','product']\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 46,
+      "metadata": {
+        "id": "b7B8EhUdOer2"
+      },
+      "outputs": [],
+      "source": [
+        "# Encode target labels to numeric values\n",
+        "label_encoders = {}\n",
+        "for target in targets_subtask1 + targets_subtask2:\n",
+        "    le = LabelEncoder()\n",
+        "    df[target] = le.fit_transform(df[target])\n",
+        "    label_encoders[target] = le\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 47,
+      "metadata": {
+        "id": "8a9dTrQ9Oh7Q"
+      },
+      "outputs": [],
+      "source": [
+        "# Prepare data for both title and text\n",
+        "def prepare_data(text_column):\n",
+        "    X = df[features + [text_column]]\n",
+        "    y_subtask1 = df[targets_subtask1]\n",
+        "    y_subtask2 = df[targets_subtask2]\n",
+        "\n",
+        "    data_splits = {}\n",
+        "    for target in targets_subtask1 + targets_subtask2:\n",
+        "        X_train, X_test, y_train, y_test = train_test_split(\n",
+        "            X, df[target], test_size=0.1, random_state=42\n",
+        "        )\n",
+        "\n",
+        "        # Reset indices to ensure matching\n",
+        "        X_train = X_train.reset_index(drop=True)\n",
+        "        y_train = y_train.reset_index(drop=True)\n",
+        "        X_test = X_test.reset_index(drop=True)\n",
+        "        y_test = y_test.reset_index(drop=True)\n",
+        "\n",
+        "        data_splits[target] = (X_train, X_test, y_train, y_test)\n",
+        "\n",
+        "    return data_splits\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 48,
+      "metadata": {
+        "id": "Ffx_UagwOlb2"
+      },
+      "outputs": [],
+      "source": [
+        "# Prepare data for title and text\n",
+        "title_splits = prepare_data('title')\n",
+        "text_splits = prepare_data('text')\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 49,
+      "metadata": {
+        "id": "RQYXs45FOoPz"
+      },
+      "outputs": [],
+      "source": [
+        "def train_and_evaluate_nn(data_splits, targets, model_type='title', early_stopping_patience=6, lr_reduce_factor=0.05):\n",
+        "    f1_scores = []  # List to store F1 scores for each task\n",
+        "\n",
+        "    for target in targets:\n",
+        "        print(f\"\\nStarting training for task: {target}\")  # Print task message\n",
+        "\n",
+        "        X_train, X_test, y_train, y_test = data_splits[target]\n",
+        "\n",
+        "        # Prepare text data using the tokenizer\n",
+        "        if model_type == 'title':\n",
+        "            texts_train = X_train['title'].values\n",
+        "            texts_test = X_test['title'].values\n",
+        "        else:\n",
+        "            texts_train = X_train['text'].values\n",
+        "            texts_test = X_test['text'].values\n",
+        "\n",
+        "        # Create DataLoader for training and testing\n",
+        "        train_dataset = TextDataset(texts_train, y_train, tokenizer, config['max_len'])\n",
+        "        test_dataset = TextDataset(texts_test, y_test, tokenizer, config['max_len'])\n",
+        "\n",
+        "        train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)\n",
+        "        test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False)\n",
+        "\n",
+        "        # Model setup\n",
+        "        num_labels = len(label_encoders[target].classes_)\n",
+        "        model = AutoModelForSequenceClassification.from_pretrained(config['model_name'], num_labels=num_labels).to(device)\n",
+        "\n",
+        "        optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])\n",
+        "        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=lr_reduce_factor, patience=3, verbose=True)\n",
+        "        criterion = nn.CrossEntropyLoss()\n",
+        "\n",
+        "        # Training process\n",
+        "        model.train()\n",
+        "        best_loss = float('inf')\n",
+        "        early_stop_counter = 0\n",
+        "\n",
+        "        for epoch in range(config['epochs']):\n",
+        "            print(f\"Epoch {epoch+1}/{config['epochs']} - Training: {target}\")\n",
+        "            progress_bar = tqdm(train_loader, desc=f\"Training Epoch {epoch+1}\", total=len(train_loader), leave=True)\n",
+        "            epoch_loss = 0.0\n",
+        "\n",
+        "            for batch in progress_bar:\n",
+        "                optimizer.zero_grad()\n",
+        "                input_ids = batch['input_ids'].squeeze(1).to(device)\n",
+        "                attention_mask = batch['attention_mask'].squeeze(1).to(device)\n",
+        "                labels = batch['label'].to(device)\n",
+        "\n",
+        "                outputs = model(input_ids, attention_mask=attention_mask)\n",
+        "                loss = criterion(outputs.logits, labels)\n",
+        "                loss.backward()\n",
+        "                optimizer.step()\n",
+        "                epoch_loss += loss.item()\n",
+        "                progress_bar.set_postfix(loss=loss.item())\n",
+        "\n",
+        "            # Average loss for the epoch\n",
+        "            avg_epoch_loss = epoch_loss / len(train_loader)\n",
+        "            print(f\"Average Training Loss for Epoch {epoch+1}: {avg_epoch_loss}\")\n",
+        "\n",
+        "            # Evaluate on the test set to compute validation loss\n",
+        "            val_loss = 0.0\n",
+        "            model.eval()\n",
+        "            with torch.no_grad():\n",
+        "                for batch in test_loader:\n",
+        "                    input_ids = batch['input_ids'].squeeze(1).to(device)\n",
+        "                    attention_mask = batch['attention_mask'].squeeze(1).to(device)\n",
+        "                    labels = batch['label'].to(device)\n",
+        "\n",
+        "                    outputs = model(input_ids, attention_mask=attention_mask)\n",
+        "                    loss = criterion(outputs.logits, labels)\n",
+        "                    val_loss += loss.item()\n",
+        "\n",
+        "            avg_val_loss = val_loss / len(test_loader)\n",
+        "            print(f\"Validation Loss after Epoch {epoch+1}: {avg_val_loss}\")\n",
+        "\n",
+        "            # Step the scheduler with the validation loss\n",
+        "            scheduler.step(avg_val_loss)\n",
+        "\n",
+        "            # Early stopping check\n",
+        "            if avg_val_loss < best_loss:\n",
+        "                best_loss = avg_val_loss\n",
+        "                early_stop_counter = 0\n",
+        "                torch.save(model.state_dict(), f\"best_model_{target}.pt\")  # Save the best model\n",
+        "            else:\n",
+        "                early_stop_counter += 1\n",
+        "                print(f\"Early stopping counter: {early_stop_counter}/{early_stopping_patience}\")\n",
+        "\n",
+        "            if early_stop_counter >= early_stopping_patience:\n",
+        "                print(\"Early stopping triggered.\")\n",
+        "                break\n",
+        "\n",
+        "        # Load the best model for evaluation\n",
+        "        model.load_state_dict(torch.load(f\"best_model_{target}.pt\"))\n",
+        "\n",
+        "        # Evaluation process\n",
+        "        print(f\"Evaluating model for task: {target}\")\n",
+        "        model.eval()\n",
+        "        y_preds = []\n",
+        "        y_true = []\n",
+        "        with torch.no_grad():\n",
+        "            for batch in tqdm(test_loader, desc=\"Evaluating\", total=len(test_loader), leave=True):\n",
+        "                input_ids = batch['input_ids'].squeeze(1).to(device)\n",
+        "                attention_mask = batch['attention_mask'].squeeze(1).to(device)\n",
+        "                labels = batch['label'].to(device)\n",
+        "                outputs = model(input_ids, attention_mask=attention_mask)\n",
+        "                _, preds = torch.max(outputs.logits, dim=1)\n",
+        "                y_preds.extend(preds.cpu().numpy())\n",
+        "                y_true.extend(labels.cpu().numpy())\n",
+        "\n",
+        "        # Decode labels back to original categories using the label encoder\n",
+        "        decoded_preds = label_encoders[target].inverse_transform(y_preds)\n",
+        "        decoded_true = label_encoders[target].inverse_transform(y_true)\n",
+        "\n",
+        "        # Calculate F1 score for the task\n",
+        "        f1 = f1_score(decoded_true, decoded_preds, average='weighted')\n",
+        "        f1_scores.append(f1)\n",
+        "        print(f\"F1-Score for {target}: {f1}\")\n",
+        "\n",
+        "        # Print classification report\n",
+        "        print(f\"Classification Report for {target}:\\n\")\n",
+        "        print(classification_report(decoded_true, decoded_preds, zero_division=0))\n",
+        "\n",
+        "    return f1_scores  # Return the list of F1 scores for plotting\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Train and evaluate for both title and text\n",
+        "print(\"\\nTraining and Evaluating for Title Tasks:\")\n",
+        "title_f1_scores = train_and_evaluate_nn(title_splits, targets_subtask1 + targets_subtask2, model_type='title')"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 436
+        },
+        "id": "OYEB0MQmVAWM",
+        "outputId": "4bee43d9-8e9e-4b28-93a3-f96262b7c427"
+      },
+      "execution_count": 50,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Training and Evaluating for Title Tasks:\n",
+            "\n",
+            "Starting training for task: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.1 and are newly initialized: ['classifier.bias', 'classifier.weight']\n",
+            "You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Epoch 1/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 1:  28%|██▊       | 81/286 [00:24<01:01,  3.35it/s, loss=0.913]\n"
+          ]
+        },
+        {
+          "output_type": "error",
+          "ename": "KeyboardInterrupt",
+          "evalue": "",
+          "traceback": [
+            "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+            "\u001b[0;31mKeyboardInterrupt\u001b[0m                         Traceback (most recent call last)",
+            "\u001b[0;32m<ipython-input-50-029969efa444>\u001b[0m in \u001b[0;36m<cell line: 3>\u001b[0;34m()\u001b[0m\n\u001b[1;32m      1\u001b[0m \u001b[0;31m# Train and evaluate for both title and text\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m      2\u001b[0m \u001b[0mprint\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m\"\\nTraining and Evaluating for Title Tasks:\"\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m----> 3\u001b[0;31m \u001b[0mtitle_f1_scores\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mtrain_and_evaluate_nn\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mtitle_splits\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mtargets_subtask1\u001b[0m \u001b[0;34m+\u001b[0m \u001b[0mtargets_subtask2\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mmodel_type\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0;34m'title'\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m",
+            "\u001b[0;32m<ipython-input-49-cb47ea6c2053>\u001b[0m in \u001b[0;36mtrain_and_evaluate_nn\u001b[0;34m(data_splits, targets, model_type, early_stopping_patience, lr_reduce_factor)\u001b[0m\n\u001b[1;32m     50\u001b[0m                 \u001b[0mloss\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mbackward\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     51\u001b[0m                 \u001b[0moptimizer\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mstep\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m---> 52\u001b[0;31m                 \u001b[0mepoch_loss\u001b[0m \u001b[0;34m+=\u001b[0m \u001b[0mloss\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mitem\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m     53\u001b[0m                 \u001b[0mprogress_bar\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mset_postfix\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mloss\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0mloss\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mitem\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     54\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n",
+            "\u001b[0;31mKeyboardInterrupt\u001b[0m: "
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 51,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "OsSoAzzgOyct",
+        "outputId": "71a36e17-39e3-4a13-c0c6-78c677fcd537"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Training and Evaluating for Text Tasks:\n",
+            "\n",
+            "Starting training for task: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.1 and are newly initialized: ['classifier.bias', 'classifier.weight']\n",
+            "You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Epoch 1/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 1: 100%|██████████| 286/286 [01:33<00:00,  3.05it/s, loss=0.0444]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 1: 0.544237247687745\n",
+            "Validation Loss after Epoch 1: 0.24509203439811245\n",
+            "Epoch 2/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 2: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.044]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 2: 0.2373426863207267\n",
+            "Validation Loss after Epoch 2: 0.22464832931291312\n",
+            "Epoch 3/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 3: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.0589]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 3: 0.1771137460681994\n",
+            "Validation Loss after Epoch 3: 0.2327472270699218\n",
+            "Early stopping counter: 1/6\n",
+            "Epoch 4/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 4: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.0959]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 4: 0.13375157790610215\n",
+            "Validation Loss after Epoch 4: 0.21103535001748241\n",
+            "Epoch 5/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 5: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.511]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 5: 0.10782346538010776\n",
+            "Validation Loss after Epoch 5: 0.21506047347793356\n",
+            "Early stopping counter: 1/6\n",
+            "Epoch 6/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 6: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.0204]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 6: 0.08320835315365135\n",
+            "Validation Loss after Epoch 6: 0.2051226525072707\n",
+            "Epoch 7/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 7: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.0141]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 7: 0.07930319391311491\n",
+            "Validation Loss after Epoch 7: 0.22887533970060758\n",
+            "Early stopping counter: 1/6\n",
+            "Epoch 8/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 8: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.159]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 8: 0.07253336121321663\n",
+            "Validation Loss after Epoch 8: 0.2430195636843564\n",
+            "Early stopping counter: 2/6\n",
+            "Epoch 9/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 9: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.00565]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 9: 0.05938916407009404\n",
+            "Validation Loss after Epoch 9: 0.2913070010836236\n",
+            "Early stopping counter: 3/6\n",
+            "Epoch 10/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 10: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.0141]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 10: 0.060003303052447214\n",
+            "Validation Loss after Epoch 10: 0.27248840396350715\n",
+            "Early stopping counter: 4/6\n",
+            "Epoch 11/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 11: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.00647]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 11: 0.029100900357165796\n",
+            "Validation Loss after Epoch 11: 0.24538208280864637\n",
+            "Early stopping counter: 5/6\n",
+            "Epoch 12/100 - Training: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 12: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.00621]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 12: 0.018464171339454896\n",
+            "Validation Loss after Epoch 12: 0.24954331173648825\n",
+            "Early stopping counter: 6/6\n",
+            "Early stopping triggered.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "<ipython-input-49-cb47ea6c2053>:92: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.\n",
+            "  model.load_state_dict(torch.load(f\"best_model_{target}.pt\"))\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Evaluating model for task: hazard-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Evaluating: 100%|██████████| 32/32 [00:03<00:00,  9.39it/s]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "F1-Score for hazard-category: 0.945432062323167\n",
+            "Classification Report for hazard-category:\n",
+            "\n",
+            "                                precision    recall  f1-score   support\n",
+            "\n",
+            "                     allergens       0.97      0.97      0.97       188\n",
+            "                    biological       0.99      0.99      0.99       171\n",
+            "                      chemical       0.87      0.97      0.92        35\n",
+            "food additives and flavourings       1.00      0.20      0.33         5\n",
+            "                foreign bodies       1.00      0.98      0.99        58\n",
+            "                         fraud       0.76      0.89      0.82        28\n",
+            "                     migration       0.00      0.00      0.00         1\n",
+            "          organoleptic aspects       0.60      1.00      0.75         3\n",
+            "                  other hazard       0.77      0.67      0.71        15\n",
+            "              packaging defect       0.67      0.40      0.50         5\n",
+            "\n",
+            "                      accuracy                           0.95       509\n",
+            "                     macro avg       0.76      0.71      0.70       509\n",
+            "                  weighted avg       0.95      0.95      0.95       509\n",
+            "\n",
+            "\n",
+            "Starting training for task: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.1 and are newly initialized: ['classifier.bias', 'classifier.weight']\n",
+            "You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Epoch 1/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 1: 100%|██████████| 286/286 [01:33<00:00,  3.05it/s, loss=1.15]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 1: 1.959177691619713\n",
+            "Validation Loss after Epoch 1: 1.3447565790265799\n",
+            "Epoch 2/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 2: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=1.15]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 2: 1.08349797473504\n",
+            "Validation Loss after Epoch 2: 1.0225662644952536\n",
+            "Epoch 3/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 3: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.629]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 3: 0.6564831099622733\n",
+            "Validation Loss after Epoch 3: 0.9664974706247449\n",
+            "Epoch 4/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 4: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.248]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 4: 0.4351279190318151\n",
+            "Validation Loss after Epoch 4: 0.9589017620310187\n",
+            "Epoch 5/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 5: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.273]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 5: 0.27472463593381896\n",
+            "Validation Loss after Epoch 5: 1.010301393456757\n",
+            "Early stopping counter: 1/6\n",
+            "Epoch 6/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 6: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.225]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 6: 0.16529941213336755\n",
+            "Validation Loss after Epoch 6: 1.0976982607971877\n",
+            "Early stopping counter: 2/6\n",
+            "Epoch 7/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 7: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.157]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 7: 0.10554644945110161\n",
+            "Validation Loss after Epoch 7: 1.0441702927928418\n",
+            "Early stopping counter: 3/6\n",
+            "Epoch 8/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 8: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.959]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 8: 0.08849476649705972\n",
+            "Validation Loss after Epoch 8: 1.2256229988415726\n",
+            "Early stopping counter: 4/6\n",
+            "Epoch 9/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 9: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.621]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 9: 0.05181649050649281\n",
+            "Validation Loss after Epoch 9: 1.1854791252408177\n",
+            "Early stopping counter: 5/6\n",
+            "Epoch 10/100 - Training: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 10: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.0476]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 10: 0.024864525079134513\n",
+            "Validation Loss after Epoch 10: 1.1921431277296506\n",
+            "Early stopping counter: 6/6\n",
+            "Early stopping triggered.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "<ipython-input-49-cb47ea6c2053>:92: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.\n",
+            "  model.load_state_dict(torch.load(f\"best_model_{target}.pt\"))\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Evaluating model for task: product-category\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Evaluating: 100%|██████████| 32/32 [00:03<00:00,  9.25it/s]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "F1-Score for product-category: 0.7407954672116321\n",
+            "Classification Report for product-category:\n",
+            "\n",
+            "                                                   precision    recall  f1-score   support\n",
+            "\n",
+            "                              alcoholic beverages       1.00      1.00      1.00         2\n",
+            "                      cereals and bakery products       0.62      0.78      0.69        54\n",
+            "     cocoa and cocoa preparations, coffee and tea       0.83      0.66      0.73        29\n",
+            "                                    confectionery       0.33      0.70      0.45        20\n",
+            "dietetic foods, food supplements, fortified foods       0.64      0.64      0.64        11\n",
+            "                                    fats and oils       1.00      0.33      0.50         3\n",
+            "                                   feed materials       0.00      0.00      0.00         2\n",
+            "                           food contact materials       0.00      0.00      0.00         1\n",
+            "                            fruits and vegetables       0.85      0.70      0.76        56\n",
+            "                                 herbs and spices       0.43      0.33      0.38         9\n",
+            "                            honey and royal jelly       0.00      0.00      0.00         0\n",
+            "                                ices and desserts       0.97      0.88      0.92        33\n",
+            "                     meat, egg and dairy products       0.93      0.86      0.89       131\n",
+            "                          non-alcoholic beverages       0.82      0.88      0.85        16\n",
+            "                     nuts, nut products and seeds       0.74      0.84      0.78        37\n",
+            "                       other food product / mixed       0.00      0.00      0.00         1\n",
+            "                                         pet feed       1.00      1.00      1.00         3\n",
+            "                       prepared dishes and snacks       0.49      0.39      0.43        51\n",
+            "                                          seafood       0.91      0.75      0.82        28\n",
+            "             soups, broths, sauces and condiments       0.57      0.76      0.65        21\n",
+            "                                sugars and syrups       1.00      1.00      1.00         1\n",
+            "\n",
+            "                                         accuracy                           0.74       509\n",
+            "                                        macro avg       0.62      0.59      0.60       509\n",
+            "                                     weighted avg       0.76      0.74      0.74       509\n",
+            "\n",
+            "\n",
+            "Starting training for task: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.1 and are newly initialized: ['classifier.bias', 'classifier.weight']\n",
+            "You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Epoch 1/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 1: 100%|██████████| 286/286 [01:33<00:00,  3.05it/s, loss=1.69]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 1: 2.332929180218623\n",
+            "Validation Loss after Epoch 1: 1.2304610623978078\n",
+            "Epoch 2/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 2: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.694]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 2: 1.100000870342438\n",
+            "Validation Loss after Epoch 2: 0.8902886137366295\n",
+            "Epoch 3/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 3: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=1.08]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 3: 0.7467841799598891\n",
+            "Validation Loss after Epoch 3: 0.8242357873823494\n",
+            "Epoch 4/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 4: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.349]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 4: 0.5630655665393476\n",
+            "Validation Loss after Epoch 4: 0.712826514034532\n",
+            "Epoch 5/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 5: 100%|██████████| 286/286 [01:32<00:00,  3.09it/s, loss=0.692]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 5: 0.41565547908910294\n",
+            "Validation Loss after Epoch 5: 0.6679542877827771\n",
+            "Epoch 6/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 6: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.152]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 6: 0.32309987911811244\n",
+            "Validation Loss after Epoch 6: 0.7015910902409814\n",
+            "Early stopping counter: 1/6\n",
+            "Epoch 7/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 7: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.287]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 7: 0.2444270599920016\n",
+            "Validation Loss after Epoch 7: 0.6794237823341973\n",
+            "Early stopping counter: 2/6\n",
+            "Epoch 8/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 8: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.329]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 8: 0.1858442516450386\n",
+            "Validation Loss after Epoch 8: 0.6738847977248952\n",
+            "Early stopping counter: 3/6\n",
+            "Epoch 9/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 9: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.0439]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 9: 0.13258287469511265\n",
+            "Validation Loss after Epoch 9: 0.6984269534877967\n",
+            "Early stopping counter: 4/6\n",
+            "Epoch 10/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 10: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.0226]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 10: 0.08117332728742459\n",
+            "Validation Loss after Epoch 10: 0.685097749956185\n",
+            "Early stopping counter: 5/6\n",
+            "Epoch 11/100 - Training: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 11: 100%|██████████| 286/286 [01:32<00:00,  3.10it/s, loss=0.208]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 11: 0.06708473650986081\n",
+            "Validation Loss after Epoch 11: 0.6803873544558883\n",
+            "Early stopping counter: 6/6\n",
+            "Early stopping triggered.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "<ipython-input-49-cb47ea6c2053>:92: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.\n",
+            "  model.load_state_dict(torch.load(f\"best_model_{target}.pt\"))\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Evaluating model for task: hazard\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Evaluating: 100%|██████████| 32/32 [00:03<00:00,  9.34it/s]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "F1-Score for hazard: 0.851168526711684\n",
+            "Classification Report for hazard:\n",
+            "\n",
+            "                                                 precision    recall  f1-score   support\n",
+            "\n",
+            "                                      Aflatoxin       1.00      1.00      1.00         2\n",
+            "                                 abnormal smell       0.00      0.00      0.00         0\n",
+            "                                      alkaloids       0.00      0.00      0.00         2\n",
+            "                                      allergens       0.00      0.00      0.00         3\n",
+            "                                         almond       0.67      1.00      0.80         4\n",
+            "                                      amygdalin       0.00      0.00      0.00         1\n",
+            "                           bad smell / off odor       0.00      0.00      0.00         1\n",
+            "                                  bone fragment       1.00      1.00      1.00         1\n",
+            "                                     brazil nut       0.00      0.00      0.00         1\n",
+            "                              bulging packaging       0.00      0.00      0.00         2\n",
+            "                                         cashew       1.00      0.80      0.89         5\n",
+            "                    celery and products thereof       0.00      0.00      0.00         1\n",
+            " cereals containing gluten and products thereof       0.84      0.94      0.89        17\n",
+            "                                       chemical       0.00      0.00      0.00         1\n",
+            "               chemical compound (high content)       0.50      1.00      0.67         1\n",
+            "                          clostridium botulinum       0.75      1.00      0.86         3\n",
+            "                                        coconut       0.00      0.00      0.00         1\n",
+            "                        compositional deviation       0.00      0.00      0.00         1\n",
+            "                                cronobacter spp       0.00      0.00      0.00         1\n",
+            "               crustaceans and products thereof       1.00      1.00      1.00         1\n",
+            "                    e 425 - konjac unauthorised       1.00      1.00      1.00         2\n",
+            "                      eggs and products thereof       0.83      0.94      0.88        16\n",
+            "                               escherichia coli       1.00      1.00      1.00        16\n",
+            "                      fish and products thereof       1.00      0.80      0.89         5\n",
+            "                                 foreign bodies       0.33      0.50      0.40         2\n",
+            "                                 glass fragment       1.00      0.90      0.95        10\n",
+            "                                       hazelnut       1.00      1.00      1.00         2\n",
+            "                                   heavy metals       0.80      1.00      0.89         4\n",
+            "                        high content of cyanide       0.00      0.00      0.00         1\n",
+            "                            improper conditions       0.00      0.00      0.00         2\n",
+            "                             improper packaging       0.00      0.00      0.00         1\n",
+            "                             incorrect labeling       1.00      1.00      1.00         1\n",
+            "                         incorrect use by dates       1.00      1.00      1.00         4\n",
+            "                              inspection issues       0.70      1.00      0.82         7\n",
+            "                       labelling/misdescription       1.00      1.00      1.00         3\n",
+            "                         listeria monocytogenes       0.97      0.97      0.97        75\n",
+            "                                   listeria spp       0.00      0.00      0.00         1\n",
+            "                                 metal fragment       0.94      0.94      0.94        16\n",
+            "                  microbiological contamination       1.00      0.50      0.67         2\n",
+            "                      milk and products thereof       0.94      0.98      0.96        59\n",
+            "                                 misdescription       0.00      0.00      0.00         1\n",
+            "                                         moulds       1.00      1.00      1.00         1\n",
+            "                   mustard and products thereof       1.00      1.00      1.00         5\n",
+            "                                      norovirus       1.00      1.00      1.00         2\n",
+            "                                           nuts       0.40      1.00      0.57         2\n",
+            "                                          other       0.42      0.71      0.53        14\n",
+            "                           other not classified       0.50      0.33      0.40         3\n",
+            "        other not classified biological hazards       0.00      0.00      0.00         1\n",
+            "          other not classified chemical hazards       1.00      0.67      0.80         3\n",
+            "other not classified hazards for foreign bodies       0.00      0.00      0.00         1\n",
+            "                               packaging defect       0.50      0.50      0.50         2\n",
+            "     paralytic shellfish poisoning (psp) toxins       0.00      0.00      0.00         1\n",
+            "                            pathogenic bacteria       0.00      0.00      0.00         1\n",
+            "                   peanuts and products thereof       0.96      0.96      0.96        24\n",
+            "                                      pecan nut       1.00      1.00      1.00         3\n",
+            "                                  pistachio nut       1.00      1.00      1.00         2\n",
+            "                               plastic fragment       0.89      0.96      0.92        25\n",
+            "               polycyclic aromatic hydrocarbons       1.00      1.00      1.00         1\n",
+            "                            poor hygienic state       0.00      0.00      0.00         1\n",
+            "                  poor or insufficient controls       0.00      0.00      0.00         2\n",
+            "                                     processing       0.75      0.75      0.75         4\n",
+            "               product category/characteristics       0.00      0.00      0.00         1\n",
+            "                               rubber fragments       1.00      0.67      0.80         3\n",
+            "                                     salmonella       0.93      0.97      0.95        66\n",
+            "              sesame seeds and products thereof       1.00      1.00      1.00         5\n",
+            "                  soybeans and products thereof       1.00      0.88      0.94        17\n",
+            "                  specified risk material (srm)       0.00      0.00      0.00         1\n",
+            "                                       spoilage       0.20      1.00      0.33         1\n",
+            "                                 staphylococcus       1.00      1.00      1.00         1\n",
+            "                                         stones       0.00      0.00      0.00         0\n",
+            "                            sulphates/sulphites       0.00      0.00      0.00         2\n",
+            "                                sulphur dioxide       1.00      0.67      0.80         3\n",
+            "                  sulphur dioxide and sulphites       0.69      1.00      0.81        11\n",
+            "                                      tampering       0.00      0.00      0.00         2\n",
+            "                              taste disturbance       0.00      0.00      0.00         1\n",
+            " too high content of tetrahydrocannabinol (THC)       1.00      1.00      1.00         1\n",
+            "                                          toxin       1.00      1.00      1.00         5\n",
+            "          unauthorised substance ethylene oxide       1.00      1.00      1.00         8\n",
+            "              unauthorised substance sildenafil       0.00      0.00      0.00         0\n",
+            "                            undeclared additive       0.00      0.00      0.00         1\n",
+            "                                         walnut       1.00      0.67      0.80         3\n",
+            "\n",
+            "                                       accuracy                           0.87       509\n",
+            "                                      macro avg       0.54      0.56      0.53       509\n",
+            "                                   weighted avg       0.84      0.87      0.85       509\n",
+            "\n",
+            "\n",
+            "Starting training for task: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.1 and are newly initialized: ['classifier.bias', 'classifier.weight']\n",
+            "You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Epoch 1/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 1: 100%|██████████| 286/286 [01:34<00:00,  3.04it/s, loss=6.77]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 1: 6.394329741284563\n",
+            "Validation Loss after Epoch 1: 6.0741125494241714\n",
+            "Epoch 2/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 2: 100%|██████████| 286/286 [01:32<00:00,  3.08it/s, loss=5.19]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 2: 5.553963528646456\n",
+            "Validation Loss after Epoch 2: 5.266009822487831\n",
+            "Epoch 3/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 3: 100%|██████████| 286/286 [01:32<00:00,  3.08it/s, loss=3.87]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 3: 4.72012351526247\n",
+            "Validation Loss after Epoch 3: 4.82595931738615\n",
+            "Epoch 4/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 4: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=3.91]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 4: 3.992046497084878\n",
+            "Validation Loss after Epoch 4: 4.40546328574419\n",
+            "Epoch 5/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 5: 100%|██████████| 286/286 [01:33<00:00,  3.06it/s, loss=3.48]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 5: 3.3551444269560435\n",
+            "Validation Loss after Epoch 5: 4.133875817060471\n",
+            "Epoch 6/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 6: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=2.63]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 6: 2.774994277037107\n",
+            "Validation Loss after Epoch 6: 3.954670839011669\n",
+            "Epoch 7/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 7: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=1.8]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 7: 2.2691924738717244\n",
+            "Validation Loss after Epoch 7: 3.745982140302658\n",
+            "Epoch 8/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 8: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=2.77]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 8: 1.8416156656258589\n",
+            "Validation Loss after Epoch 8: 3.7101660668849945\n",
+            "Epoch 9/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 9: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=2.17]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 9: 1.4883018311087068\n",
+            "Validation Loss after Epoch 9: 3.6127190440893173\n",
+            "Epoch 10/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 10: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=1.2]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 10: 1.1978958213662767\n",
+            "Validation Loss after Epoch 10: 3.5827135294675827\n",
+            "Epoch 11/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 11: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=0.526]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 11: 0.9644730380781881\n",
+            "Validation Loss after Epoch 11: 3.546514518558979\n",
+            "Epoch 12/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 12: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=0.682]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 12: 0.7744894795171864\n",
+            "Validation Loss after Epoch 12: 3.4941411837935448\n",
+            "Epoch 13/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 13: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=0.47]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 13: 0.6248051188625656\n",
+            "Validation Loss after Epoch 13: 3.528816841542721\n",
+            "Early stopping counter: 1/6\n",
+            "Epoch 14/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 14: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=0.567]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 14: 0.5045145059694777\n",
+            "Validation Loss after Epoch 14: 3.5245853289961815\n",
+            "Early stopping counter: 2/6\n",
+            "Epoch 15/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 15: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=0.882]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 15: 0.4124530829176619\n",
+            "Validation Loss after Epoch 15: 3.5116448402404785\n",
+            "Early stopping counter: 3/6\n",
+            "Epoch 16/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 16: 100%|██████████| 286/286 [01:33<00:00,  3.07it/s, loss=0.0892]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 16: 0.33625667303852685\n",
+            "Validation Loss after Epoch 16: 3.5644024573266506\n",
+            "Early stopping counter: 4/6\n",
+            "Epoch 17/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 17: 100%|██████████| 286/286 [01:33<00:00,  3.06it/s, loss=0.0945]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 17: 0.26898782132388827\n",
+            "Validation Loss after Epoch 17: 3.5561018474400043\n",
+            "Early stopping counter: 5/6\n",
+            "Epoch 18/100 - Training: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Training Epoch 18: 100%|██████████| 286/286 [01:33<00:00,  3.06it/s, loss=0.386]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Average Training Loss for Epoch 18: 0.24712968376706113\n",
+            "Validation Loss after Epoch 18: 3.5498812943696976\n",
+            "Early stopping counter: 6/6\n",
+            "Early stopping triggered.\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "<ipython-input-49-cb47ea6c2053>:92: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.\n",
+            "  model.load_state_dict(torch.load(f\"best_model_{target}.pt\"))\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Evaluating model for task: product\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "Evaluating: 100%|██████████| 32/32 [00:03<00:00,  9.06it/s]\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "F1-Score for product: 0.4437846781325187\n",
+            "Classification Report for product:\n",
+            "\n",
+            "                                                   precision    recall  f1-score   support\n",
+            "\n",
+            "                           Catfishes (freshwater)       0.75      1.00      0.86         3\n",
+            "                            Fishes not identified       0.33      0.20      0.25         5\n",
+            "                         Not classified pork meat       0.00      0.00      0.00         1\n",
+            "              Precooked cooked pork meat products       0.00      0.00      0.00         1\n",
+            "                               after dinner mints       0.00      0.00      0.00         1\n",
+            "                                            algae       1.00      0.67      0.80         3\n",
+            "                                  almond products       1.00      1.00      1.00         2\n",
+            "                                          almonds       0.33      1.00      0.50         1\n",
+            "                                 anchovies in oil       0.00      0.00      0.00         1\n",
+            "                                       angus beef       0.00      0.00      0.00         1\n",
+            "                                       apple cake       0.00      0.00      0.00         1\n",
+            "                                      apple juice       0.00      0.00      0.00         0\n",
+            "                                  apricot kernels       0.00      0.00      0.00         0\n",
+            "                                         apricots       0.00      0.00      0.00         1\n",
+            "                                        baby food       0.00      0.00      0.00         1\n",
+            "                                     baby spinach       0.67      1.00      0.80         2\n",
+            "                                  bakery products       0.00      0.00      0.00         1\n",
+            "                                       baking mix       0.00      0.00      0.00         1\n",
+            "                                           bamboo       0.00      0.00      0.00         1\n",
+            "                                             bars       1.00      1.00      1.00         1\n",
+            "                                            basil       0.00      0.00      0.00         0\n",
+            "                                basil pesto sauce       0.50      1.00      0.67         1\n",
+            "                                       bean paste       0.00      0.00      0.00         0\n",
+            "                                       bean snack       0.00      0.00      0.00         1\n",
+            "                                             beef       0.33      0.67      0.44         3\n",
+            "                                    beef products       0.50      0.50      0.50         2\n",
+            "                                      beef stewed       0.00      0.00      0.00         1\n",
+            "                                             beer       0.50      1.00      0.67         1\n",
+            "                                         biscuits       0.17      0.50      0.25         2\n",
+            "                           bitter apricot kernels       0.00      0.00      0.00         1\n",
+            "                                     black pepper       0.00      0.00      0.00         0\n",
+            "                                      blue cheese       0.00      0.00      0.00         0\n",
+            "              boletus mushrooms, stems and pieces       0.00      0.00      0.00         1\n",
+            "                            bottled mineral water       0.00      0.00      0.00         2\n",
+            "                                    bottled water       0.00      0.00      0.00         0\n",
+            "                                      brazil nuts       1.00      1.00      1.00         1\n",
+            "                                            bread       0.33      0.50      0.40         2\n",
+            "                      bread and products therefor       0.00      0.00      0.00         2\n",
+            "                                      bread crumb       0.00      0.00      0.00         0\n",
+            "                                breakfast cereals       0.00      0.00      0.00         0\n",
+            "                                         broccoli       0.00      0.00      0.00         0\n",
+            "                                         brownies       0.00      0.00      0.00         0\n",
+            "                                             buns       0.00      0.00      0.00         1\n",
+            "                           burrito (ready to eat)       0.00      0.00      0.00         0\n",
+            "                                            cakes       0.86      0.67      0.75         9\n",
+            "                                          candies       0.00      0.00      0.00         3\n",
+            "                                   canned chicken       0.00      0.00      0.00         1\n",
+            "                                   canned mussels       0.00      0.00      0.00         1\n",
+            "                                   canned spinach       0.00      0.00      0.00         1\n",
+            "                                    caramel bites       0.00      0.00      0.00         0\n",
+            "                                   cardamom seeds       0.00      0.00      0.00         1\n",
+            "                                           cashew       1.00      1.00      1.00         1\n",
+            "                                      cauliflower       0.00      0.00      0.00         0\n",
+            "                                          cbd oil       0.00      0.00      0.00         1\n",
+            "                                           cereal       0.00      0.00      0.00         1\n",
+            "                                      cereal bars       0.00      0.00      0.00         0\n",
+            "                                           cheese       0.62      0.71      0.67         7\n",
+            "                                   cheese burgers       0.00      0.00      0.00         1\n",
+            "                                       cheese dip       0.00      0.00      0.00         0\n",
+            "                                  cheese products       0.00      0.00      0.00         1\n",
+            "                                       chia seeds       1.00      1.00      1.00         2\n",
+            "                                          chicken       0.00      0.00      0.00         3\n",
+            "                           chicken based products       0.71      0.91      0.80        11\n",
+            "                                   chicken breast       0.00      0.00      0.00         0\n",
+            "                                    chicken broth       0.00      0.00      0.00         1\n",
+            "                                  chicken dippers       0.00      0.00      0.00         1\n",
+            "                                chicken meat meal       0.00      0.00      0.00         1\n",
+            "                            chicken meat products       0.00      0.00      0.00         0\n",
+            "                             chicken preparations       0.00      0.00      0.00         3\n",
+            "                        chicken products - frozen       0.00      0.00      0.00         0\n",
+            "                                  chilled chicken       0.00      0.00      0.00         1\n",
+            "                                   chilled salads       0.00      0.00      0.00         4\n",
+            "                                     chilli paste       0.00      0.00      0.00         1\n",
+            "                                    chilli pickle       0.00      0.00      0.00         0\n",
+            "                                    chilli powder       0.00      0.00      0.00         0\n",
+            "                                     chilli sauce       0.00      0.00      0.00         0\n",
+            "                                        chocolate       1.00      0.17      0.29         6\n",
+            "                    chocolate and hazelnut spread       0.00      0.00      0.00         2\n",
+            "                  chocolate and products therefor       0.00      0.00      0.00         1\n",
+            "                                   chocolate bars       0.60      0.75      0.67         4\n",
+            "                                  chocolate chips       0.00      0.00      0.00         0\n",
+            "                                   chocolate eggs       0.40      1.00      0.57         2\n",
+            "                               chocolate products       0.67      0.67      0.67         3\n",
+            "                                 chocolate spread       0.00      0.00      0.00         1\n",
+            "                                 chocolate wafers       0.00      0.00      0.00         1\n",
+            "                                       chocolates       0.00      0.00      0.00         0\n",
+            "                                          chorizo       1.00      0.67      0.80         3\n",
+            "                                    coconut juice       0.50      1.00      0.67         1\n",
+            "                                     coconut milk       0.00      0.00      0.00         1\n",
+            "                                         coconuts       1.00      1.00      1.00         2\n",
+            "                                     coffee beans       0.33      1.00      0.50         1\n",
+            "                                    confectionery       0.00      0.00      0.00         0\n",
+            "                                   cooked chicken       0.25      1.00      0.40         1\n",
+            "                                          cookies       0.80      0.80      0.80         5\n",
+            "                                        coriander       0.00      0.00      0.00         0\n",
+            "                                             corn       0.40      0.67      0.50         3\n",
+            "                                   cottage cheese       0.00      0.00      0.00         1\n",
+            "                                        cous cous       0.00      0.00      0.00         1\n",
+            "                                  cow milk cheese       0.00      0.00      0.00         1\n",
+            "                                            crabs       0.00      0.00      0.00         0\n",
+            "                                     cream cheese       0.00      0.00      0.00         1\n",
+            "                                           crisps       0.00      0.00      0.00         1\n",
+            "                                       croissants       1.00      1.00      1.00         1\n",
+            "                                 cultivated fungi       0.00      0.00      0.00         0\n",
+            "                                         cupcakes       0.00      0.00      0.00         1\n",
+            "                                       cured loin       0.00      0.00      0.00         1\n",
+            "                    dark chocolate coated almonds       0.00      0.00      0.00         0\n",
+            "                                  dark chocolates       1.00      1.00      1.00         3\n",
+            "                                            dates       1.00      1.00      1.00         1\n",
+            "                                         desserts       1.00      0.50      0.67         2\n",
+            "                               dietary supplement       0.20      0.50      0.29         2\n",
+            "dietetic foods, food supplements, fortified foods       0.00      0.00      0.00         1\n",
+            "                                        dip-sauce       0.00      0.00      0.00         2\n",
+            "                                    dipping sauce       0.00      0.00      0.00         1\n",
+            "                                           donuts       0.00      0.00      0.00         1\n",
+            "                                  dressing sauces       0.00      0.00      0.00         0\n",
+            "                                  dried anchovies       0.00      0.00      0.00         1\n",
+            "                                     dried apples       0.00      0.00      0.00         1\n",
+            "                                   dried apricots       1.00      1.00      1.00         3\n",
+            "                                  dried beef meat       1.00      1.00      1.00         6\n",
+            "                             dried chilli peppers       0.00      0.00      0.00         0\n",
+            "                                    dried coconut       1.00      1.00      1.00         1\n",
+            "                                dried cranberries       0.00      0.00      0.00         1\n",
+            "                                       dried figs       1.00      1.00      1.00         1\n",
+            "                                      dry sausage       0.00      0.00      0.00         1\n",
+            "                                             duck       0.00      0.00      0.00         1\n",
+            "                                        dumplings       0.00      0.00      0.00         1\n",
+            "                                             eggs       0.67      1.00      0.80         4\n",
+            "                            eggs and egg products       0.00      0.00      0.00         1\n",
+            "                                     energy drink       0.00      0.00      0.00         0\n",
+            "                                   feed materials       0.00      0.00      0.00         2\n",
+            "                                     fennel seeds       1.00      1.00      1.00         1\n",
+            "                                    fish products       0.00      0.00      0.00         0\n",
+            "                                         fish roe       0.00      0.00      0.00         0\n",
+            "                             flavoured soft drink       0.00      0.00      0.00         1\n",
+            "              flavoured whey protein preparations       0.00      0.00      0.00         1\n",
+            "                                            flour       1.00      0.50      0.67         2\n",
+            "                                        foie gras       0.00      0.00      0.00         1\n",
+            "                                  food supplement       0.00      0.00      0.00         0\n",
+            "                                       fresh beef       0.00      0.00      0.00         1\n",
+            "                                  fresh mushrooms       0.50      1.00      0.67         1\n",
+            "                                    fresh parsley       0.00      0.00      0.00         1\n",
+            "                                 fresh vegetables       0.00      0.00      0.00         1\n",
+            "                                      frozen beef       0.00      0.00      0.00         1\n",
+            "                              frozen beef patties       0.00      0.00      0.00         2\n",
+            "                                  frozen broccoli       0.00      0.00      0.00         1\n",
+            "                               frozen burger buns       0.00      0.00      0.00         1\n",
+            "                                   frozen burgers       0.00      0.00      0.00         1\n",
+            "                                   frozen chicken       0.00      0.00      0.00         1\n",
+            "                               frozen green beans       0.00      0.00      0.00         1\n",
+            "                                      frozen peas       0.00      0.00      0.00         0\n",
+            "                                   frozen peppers       0.00      0.00      0.00         1\n",
+            "                                     frozen pizza       0.50      0.50      0.50         2\n",
+            "                         frozen pork preparations       0.00      0.00      0.00         0\n",
+            "                      frozen poultry preparations       0.00      0.00      0.00         1\n",
+            "                          frozen poultry products       0.00      0.00      0.00         1\n",
+            "                     frozen ready to cook chicken       0.00      0.00      0.00         1\n",
+            "                                frozen vegetables       0.50      1.00      0.67         1\n",
+            "                         frozen vegetarian cutlet       0.00      0.00      0.00         1\n",
+            "                                      fruit juice       0.00      0.00      0.00         2\n",
+            "                                        fruit mix       0.00      0.00      0.00         0\n",
+            "                                       fruit pies       0.00      0.00      0.00         0\n",
+            "                                      fruit punch       1.00      1.00      1.00         1\n",
+            "                                    garlic powder       1.00      1.00      1.00         1\n",
+            "                                gluten free bread       0.00      0.00      0.00         0\n",
+            "                                      goat cheese       1.00      1.00      1.00         1\n",
+            "                                     gouda cheese       0.00      0.00      0.00         1\n",
+            "                                          granola       1.00      1.00      1.00         1\n",
+            "                                        gravy mix       1.00      1.00      1.00         1\n",
+            "                                       green bean       0.00      0.00      0.00         0\n",
+            "                             grissini breadsticks       0.00      0.00      0.00         1\n",
+            "                                   ground almonds       0.00      0.00      0.00         1\n",
+            "                                      ground beef       0.75      1.00      0.86         6\n",
+            "                                 ground beef meat       0.00      0.00      0.00         1\n",
+            "                              ground black pepper       0.00      0.00      0.00         1\n",
+            "                                        guacamole       0.00      0.00      0.00         0\n",
+            "                                  halloumi cheese       0.50      1.00      0.67         1\n",
+            "                                            halva       0.00      0.00      0.00         1\n",
+            "                                              ham       0.33      0.50      0.40         2\n",
+            "                                          herring       1.00      0.33      0.50         3\n",
+            "                              horseradish in jars       0.00      0.00      0.00         1\n",
+            "                                        ice cream       0.96      0.87      0.92        31\n",
+            "                                         iced tea       0.00      0.00      0.00         0\n",
+            "                                   infant formula       1.00      1.00      1.00         2\n",
+            "                                   instant cereal       0.00      0.00      0.00         1\n",
+            "                                   instant coffee       0.00      0.00      0.00         1\n",
+            "                                              jam       0.60      1.00      0.75         3\n",
+            "                                          jellies       1.00      1.00      1.00         3\n",
+            "                                             kale       0.50      1.00      0.67         1\n",
+            "                                          lasagne       0.00      0.00      0.00         1\n",
+            "                            lemonade (lemon soda)       0.00      0.00      0.00         1\n",
+            "                                          lettuce       0.00      0.00      0.00         1\n",
+            "                                 liquid egg white       1.00      1.00      1.00         1\n",
+            "                           liquid food supplement       0.00      0.00      0.00         1\n",
+            "                                      lupin seeds       0.00      0.00      0.00         1\n",
+            "                                         mackerel       0.50      1.00      0.67         1\n",
+            "                                            maize       1.00      0.50      0.67         2\n",
+            "                                        margarine       0.00      0.00      0.00         1\n",
+            "                                      marshmalows       0.00      0.00      0.00         1\n",
+            "                                 masala spice mix       0.00      0.00      0.00         1\n",
+            "                        mashed chickpeas (hummus)       0.50      1.00      0.67         1\n",
+            "                            massala spice mixture       0.00      0.00      0.00         0\n",
+            "                                       mayonnaise       0.00      0.00      0.00         1\n",
+            "      meat and meat products (other than poultry)       0.00      0.00      0.00         1\n",
+            "                                        meat loaf       0.00      0.00      0.00         1\n",
+            "                                meat preparations       0.00      0.00      0.00         1\n",
+            "              mechanically separated chicken meat       0.00      0.00      0.00         1\n",
+            "                                             milk       0.33      1.00      0.50         2\n",
+            "                   milk chocolate covered raisins       0.67      1.00      0.80         2\n",
+            "                                  milk chocolates       0.00      0.00      0.00         1\n",
+            "                                    milk products       0.00      0.00      0.00         1\n",
+            "                                      minced beef       0.00      0.00      0.00         1\n",
+            "                                      minced pork       0.00      0.00      0.00         0\n",
+            "                      mitragyna speciosa (kratom)       1.00      0.33      0.50         3\n",
+            "                                      mix of nuts       0.00      0.00      0.00         1\n",
+            "                                 mixed vegetables       0.00      0.00      0.00         1\n",
+            "                                         moussaka       0.00      0.00      0.00         1\n",
+            "                                mozzarella cheese       0.00      0.00      0.00         1\n",
+            "                                           muesli       0.33      0.33      0.33         3\n",
+            "                                        mushrooms       0.00      0.00      0.00         1\n",
+            "                                          mustard       1.00      1.00      1.00         1\n",
+            "                               non-alcoholic beer       0.00      0.00      0.00         1\n",
+            "                          non-alcoholic beverages       0.00      0.00      0.00         1\n",
+            "                                          noodles       0.00      0.00      0.00         1\n",
+            "                               nut-almond mixture       0.00      0.00      0.00         1\n",
+            "                                             nuts       0.00      0.00      0.00         1\n",
+            "                                         nuts mix       0.00      0.00      0.00         0\n",
+            "                                        olive oil       1.00      1.00      1.00         1\n",
+            "                                           olives       1.00      1.00      1.00         2\n",
+            "                                           onions       0.50      0.33      0.40         3\n",
+            "                               orange sugar paste       0.00      0.00      0.00         1\n",
+            "                                          oregano       0.00      0.00      0.00         1\n",
+            "                           organic chilled hummus       0.00      0.00      0.00         1\n",
+            "                             other dairy products       0.00      0.00      0.00         2\n",
+            "               other not classified meat products       0.20      0.33      0.25         3\n",
+            "                              other types of meat       0.33      0.50      0.40         2\n",
+            "                         other water-based drinks       1.00      1.00      1.00         1\n",
+            "                                          oysters       1.00      1.00      1.00         3\n",
+            "                                           paella       1.00      1.00      1.00         1\n",
+            "                                         pancakes       1.00      0.50      0.67         2\n",
+            "                                            pasta       0.00      0.00      0.00         0\n",
+            "                                   pasta products       0.00      0.00      0.00         0\n",
+            "                                           pastry       0.00      0.00      0.00         1\n",
+            "                                  pastry products       0.33      0.50      0.40         2\n",
+            "                                          peanuts       1.00      0.57      0.73         7\n",
+            "                                       pear juice       0.00      0.00      0.00         1\n",
+            "                                            pesto       0.00      0.00      0.00         1\n",
+            "                                         pet feed       1.00      1.00      1.00         3\n",
+            "                             pickled grape leaves       1.00      1.00      1.00         1\n",
+            "                                  pickled peppers       0.00      0.00      0.00         1\n",
+            "                                  pig meat - pork       0.50      1.00      0.67         1\n",
+            "                                        pine nuts       0.00      0.00      0.00         1\n",
+            "                                   pistachio nuts       1.00      1.00      1.00         5\n",
+            "                                            pizza       0.00      0.00      0.00         1\n",
+            "                                         plastics       0.00      0.00      0.00         1\n",
+            "                  plum bread &amp; butter pudding       0.00      0.00      0.00         1\n",
+            "                                         pork pie       0.00      0.00      0.00         1\n",
+            "                                 pork preparation       0.00      0.00      0.00         0\n",
+            "                                     pork sausage       0.50      1.00      0.67         2\n",
+            "                                     potato chips       0.00      0.00      0.00         2\n",
+            "                                         potatoes       0.67      1.00      0.80         2\n",
+            "              precooked cooked beef meat products       1.00      1.00      1.00         2\n",
+            "                                  prepacked salad       0.00      0.00      0.00         0\n",
+            "                                    prepared dish       0.00      0.00      0.00         0\n",
+            "                                  prepared salads       0.00      0.00      0.00         3\n",
+            "                                    protein balls       0.00      0.00      0.00         1\n",
+            "                                      protein bar       0.00      0.00      0.00         1\n",
+            "                                    protein drink       0.00      0.00      0.00         1\n",
+            "                                   protein powder       0.00      0.00      0.00         1\n",
+            "                                          pudding       0.00      0.00      0.00         0\n",
+            "                                      puffed rice       0.00      0.00      0.00         1\n",
+            "                                             pâté       0.00      0.00      0.00         1\n",
+            "                                      raspberries       1.00      1.00      1.00         2\n",
+            "                                    raw beef meat       0.00      0.00      0.00         1\n",
+            "                            raw cow's milk cheese       0.00      0.00      0.00         1\n",
+            "                             raw goat milk cheese       1.00      1.00      1.00         1\n",
+            "                                         raw milk       0.00      0.00      0.00         3\n",
+            "                        raw milk cheese reblochon       0.00      0.00      0.00         1\n",
+            "         ready cooked sliced chicken tikka breast       0.00      0.00      0.00         1\n",
+            "                        ready to eat - cook meals       0.09      0.10      0.10        10\n",
+            "                                       red chilli       0.00      0.00      0.00         1\n",
+            "                                     refreshments       0.00      0.00      0.00         1\n",
+            "                                             rice       0.00      0.00      0.00         1\n",
+            "                                    rice crackers       0.00      0.00      0.00         0\n",
+            "                                        rice meal       0.00      0.00      0.00         1\n",
+            "                                       rice snack       0.00      0.00      0.00         0\n",
+            "                                   salad dressing       0.00      0.00      0.00         1\n",
+            "                                           salads       0.57      0.67      0.62         6\n",
+            "                                           salami       1.00      1.00      1.00         2\n",
+            "                                           salmon       0.75      0.75      0.75         4\n",
+            "                                             salt       1.00      1.00      1.00         1\n",
+            "                                       sandwiches       1.00      0.67      0.80         6\n",
+            "                                            sauce       0.00      0.00      0.00         1\n",
+            "                                           sauces       0.00      0.00      0.00         0\n",
+            "                                          sausage       0.50      0.20      0.29         5\n",
+            "                                 sausage products       0.00      0.00      0.00         0\n",
+            "                                          seafood       0.00      0.00      0.00         1\n",
+            "                                 seafood products       0.00      0.00      0.00         0\n",
+            "                                 seasoned chicken       0.00      0.00      0.00         1\n",
+            "                                        seasoning       0.33      1.00      0.50         1\n",
+            "                                  seasoning sauce       0.00      0.00      0.00         1\n",
+            "                             seaweed preparations       0.00      0.00      0.00         1\n",
+            "                                           sesame       0.00      0.00      0.00         0\n",
+            "                                       sesame oil       0.00      0.00      0.00         0\n",
+            "                                  sesame seed oil       0.00      0.00      0.00         1\n",
+            "                                     sesame seeds       1.00      1.00      1.00         1\n",
+            "                                          shrimps       0.67      1.00      0.80         2\n",
+            "                                   smoked sausage       0.00      0.00      0.00         1\n",
+            "                                   snack crackers       1.00      1.00      1.00         1\n",
+            "                                        snack mix       0.33      0.25      0.29         4\n",
+            "                                 snacks (various)       0.00      0.00      0.00         2\n",
+            "                                      soft drinks       0.00      0.00      0.00         0\n",
+            "                                             soup       0.50      1.00      0.67         3\n",
+            "                                   soy bean paste       0.00      0.00      0.00         1\n",
+            "                                        spice mix       0.00      0.00      0.00         0\n",
+            "                                           spices       0.00      0.00      0.00         1\n",
+            "                                          spirits       0.00      0.00      0.00         0\n",
+            "                                      sport drink       0.50      1.00      0.67         1\n",
+            "                                           spread       0.00      0.00      0.00         0\n",
+            "                                          spreads       0.00      0.00      0.00         0\n",
+            "                                     spring rolls       0.67      1.00      0.80         2\n",
+            "                                     spring water       0.00      0.00      0.00         1\n",
+            "                                            squid       0.00      0.00      0.00         0\n",
+            "                                            sugar       1.00      1.00      1.00         1\n",
+            "                                   sunflower seed       0.67      0.80      0.73         5\n",
+            "                                           sweets       0.00      0.00      0.00         1\n",
+            "                                       taco sauce       0.00      0.00      0.00         1\n",
+            "                                           tahini       0.50      0.60      0.55         5\n",
+            "                            tahini (sesame paste)       0.00      0.00      0.00         1\n",
+            "                                              tea       0.00      0.00      0.00         0\n",
+            "                                         tea bags       0.00      0.00      0.00         1\n",
+            "                                        tea drink       0.00      0.00      0.00         1\n",
+            "                      thermal processed beef meat       0.00      0.00      0.00         2\n",
+            "                      thermal processed pork meat       0.67      1.00      0.80         2\n",
+            "                                           trouts       0.00      0.00      0.00         0\n",
+            "                                             tuna       1.00      0.67      0.80         3\n",
+            "                   turkey and turkey preparations       1.00      1.00      1.00         1\n",
+            "                            turkey based products       1.00      0.50      0.67         2\n",
+            "                                  turkey sandwich       0.00      0.00      0.00         0\n",
+            "                                   tzatziki sauce       0.00      0.00      0.00         1\n",
+            "                          various bakery products       0.00      0.00      0.00         1\n",
+            "                                  various cheeses       0.00      0.00      0.00         0\n",
+            "                           various pasta products       0.00      0.00      0.00         1\n",
+            "                         vegetable based products       0.00      0.00      0.00         1\n",
+            "                                    vegetable mix       0.00      0.00      0.00         0\n",
+            "                                       vegetables       0.00      0.00      0.00         1\n",
+            "                                          waffles       0.00      0.00      0.00         2\n",
+            "                                          walnuts       0.50      1.00      0.67         1\n",
+            "                                     whey protein       0.25      1.00      0.40         1\n",
+            "                              white lasagna sauce       0.00      0.00      0.00         1\n",
+            "                                             wine       1.00      1.00      1.00         1\n",
+            "                                            wraps       1.00      0.50      0.67         2\n",
+            "                                          yoghurt       1.00      0.67      0.80         3\n",
+            "\n",
+            "                                         accuracy                           0.47       509\n",
+            "                                        macro avg       0.24      0.27      0.24       509\n",
+            "                                     weighted avg       0.46      0.47      0.44       509\n",
+            "\n"
+          ]
+        }
+      ],
+      "source": [
+        "print(\"\\nTraining and Evaluating for Text Tasks:\")\n",
+        "text_f1_scores = train_and_evaluate_nn(text_splits, targets_subtask1 + targets_subtask2, model_type='text')\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Create DataFrames for F1 scores for title and text\n",
+        "f1_scores_title_df = pd.DataFrame({\n",
+        "    'Task': targets_subtask1 + targets_subtask2,\n",
+        "    'F1-Score': title_f1_scores\n",
+        "})\n",
+        "\n",
+        "f1_scores_text_df = pd.DataFrame({\n",
+        "    'Task': targets_subtask1 + targets_subtask2,\n",
+        "    'F1-Score': text_f1_scores\n",
+        "})\n",
+        "\n",
+        "# Print the collected F1-scores for title\n",
+        "print(\"\\nCollected F1-Scores for Title-Focused Classification (BioBert):\")\n",
+        "print(f1_scores_title_df)\n",
+        "\n",
+        "# Print the collected F1-scores for text\n",
+        "print(\"\\nCollected F1-Scores for Text-Focused Classification (BioBert):\")\n",
+        "print(f1_scores_text_df)\n",
+        "\n",
+        "# Plot F1-scores for visual comparison\n",
+        "plt.figure(figsize=(10, 6))\n",
+        "plt.bar(f1_scores_title_df['Task'], f1_scores_title_df['F1-Score'], alpha=0.7, label='Title-Focused')\n",
+        "plt.bar(f1_scores_text_df['Task'], f1_scores_text_df['F1-Score'], alpha=0.7, label='Text-Focused')\n",
+        "plt.ylabel(\"F1-Score\")\n",
+        "plt.title(\"F1-Score Comparison Between Title and Text Tasks (BioBert)\")\n",
+        "plt.xticks(rotation=45, ha='right')\n",
+        "plt.legend()\n",
+        "plt.tight_layout()\n",
+        "plt.show()\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 211
+        },
+        "id": "wwYyYDcAjBWh",
+        "outputId": "0b6d9f48-1d6b-4e70-f4f0-e12fe46e84ea"
+      },
+      "execution_count": 52,
+      "outputs": [
+        {
+          "output_type": "error",
+          "ename": "NameError",
+          "evalue": "name 'title_f1_scores' is not defined",
+          "traceback": [
+            "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+            "\u001b[0;31mNameError\u001b[0m                                 Traceback (most recent call last)",
+            "\u001b[0;32m<ipython-input-52-43843b11ad01>\u001b[0m in \u001b[0;36m<cell line: 2>\u001b[0;34m()\u001b[0m\n\u001b[1;32m      2\u001b[0m f1_scores_title_df = pd.DataFrame({\n\u001b[1;32m      3\u001b[0m     \u001b[0;34m'Task'\u001b[0m\u001b[0;34m:\u001b[0m \u001b[0mtargets_subtask1\u001b[0m \u001b[0;34m+\u001b[0m \u001b[0mtargets_subtask2\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m----> 4\u001b[0;31m     \u001b[0;34m'F1-Score'\u001b[0m\u001b[0;34m:\u001b[0m \u001b[0mtitle_f1_scores\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m      5\u001b[0m })\n\u001b[1;32m      6\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n",
+            "\u001b[0;31mNameError\u001b[0m: name 'title_f1_scores' is not defined"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "f1_scores_text_df = pd.DataFrame({\n",
+        "    'Task': targets_subtask1 + targets_subtask2,\n",
+        "    'F1-Score': text_f1_scores\n",
+        "})\n",
+        "\n",
+        "# Print the collected F1-scores for text\n",
+        "print(\"\\nCollected F1-Scores for Text-Focused Classification (BioBert):\")\n",
+        "print(f1_scores_text_df)"
+      ],
+      "metadata": {
+        "id": "5ursYh_G9fqi",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "6af74e6c-0b07-4a3e-b44a-4a1710897104"
+      },
+      "execution_count": 53,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "Collected F1-Scores for Text-Focused Classification (BioBert):\n",
+            "               Task  F1-Score\n",
+            "0   hazard-category  0.945432\n",
+            "1  product-category  0.740795\n",
+            "2            hazard  0.851169\n",
+            "3           product  0.443785\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "CWmiYaAurKou"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
