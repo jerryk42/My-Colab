@@ -17,7 +17,7 @@ This repository was created to participate in [SemEval 2025 Task 9: The Food Haz
 - Python 3.7+
 - Google Colab environment (with Google Drive integration)
 - Libraries:
-- `torch`: For building and training the deep learning model.
+  - `torch`: For building and training the deep learning model.
   - `transformers`: For pre-trained BioBERT models and tokenization.
   - `pandas`: For loading and preprocessing structured data.
   - `scikit-learn`: For label encoding (`LabelEncoder`) and evaluation metrics (`f1_score`, `classification_report`).
