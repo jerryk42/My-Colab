@@ -3,6 +3,9 @@
 This repository contains code for a sequence classification model built using BioBERT to detect food-related hazards and categorize them into predefined categories. 
 The solution is built in Python using PyTorch and HuggingFace Transformers.
 
+## About
+This repository was created to participate in **SemEval 2025 Task 9: The Food Hazard Detection Challenge**. The challenge evaluates explainable classification systems for titles of food-incident reports collected from the web. These algorithms aim to assist automated crawlers in identifying and extracting food safety issues from web sources, including social media. Transparency is a crucial aspect of this task due to the potential high economic impact of food hazards. 
+
 ## Features
 - Uses BioBERT for sequence classification tasks.
 - Trains on labeled food hazard data and validates on unlabeled data.
