@@ -101,10 +101,10 @@ The model is configured with the following settings:
 The performance of the model is evaluated using the **F1 Macro** score on two tasks:
 
 ### Task 1: Hazard and Product Categories
-- **F1 Macro:** 0.75
+- **F1 Macro:** 0.7558958415	
 
 ### Task 2: Hazard and Product Names
-- **F1 Macro:** 0.45
+- **F1 Macro:** 0.4714 
 
 ### Observations
 - Task 1 generally performs better due to the well-defined categorical nature of hazard and product categories.
