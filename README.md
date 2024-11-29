@@ -76,6 +76,17 @@ The model is configured with the following settings:
   - `ST1_predictions_cleaned.csv`: Contains predicted hazard and product categories.
   - `ST2_predictions_cleaned.csv`: Contains predicted hazard and product names.
 
+## Results
+The performance of the model is evaluated using the F1 Macro score on two tasks:
+- **Task 1: Hazard and Product Categories:**
+  - F1 Macro:  
+- **Task 2: Hazard and Product Names:**
+  - F1 Macro: 0.45
+
+## Observations
+-Task 1 generally performs better due to the well-defined categorical nature of hazard and product categories.
+-Task 2 is more challenging, as it involves predicting specific product and hazard names, which may require finer-grained understanding.
+
 ## How to Run
 1. Clone this repository and upload it to Google Colab.
 2. Ensure your Google Drive is mounted.
