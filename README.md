@@ -61,7 +61,8 @@ The model is configured with the following settings:
 - **Labeled Training Data:** Contains food-related hazard information and associated categories.
   - URL: `https://raw.githubusercontent.com/food-hazard-detection-semeval-2025/food-hazard-detection-semeval-2025.github.io/refs/heads/main/data/incidents_train.csv`
   - Alternatively, located in the folder `data` as the file `incidents_train.csv`.
-- **Unlabeled Validation Data:** This dataset is used by the competition to evaluate the results. It is stored in the `data` folder as a zip file named `public_data.zip`, which contains the file `incidents.csv`.
+- **Unlabeled Validation Data:** This dataset is used by the competition to evaluate the results.
+  - Located in the `data` folder as a zip file named `public_data.zip`, which contains the file `incidents.csv`.
 
 ## Output
 - **Predictions:**
