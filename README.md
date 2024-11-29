@@ -66,11 +66,11 @@ The model is configured with the following settings:
 
 ## Output
 - **Predictions:**
-  - `ST1_predictions.csv`: Contains predicted hazard and product categories.
-  - `ST2_predictions.csv`: Contains predicted hazard and product names.
+  - `ST1_predictions.csv`: Contains text, predicted hazard and product categories.
+  - `ST2_predictions.csv`: Contains text, predicted hazard and product names.
 - **Processed Predictions:**
-  - `ST1_predictions_cleaned.csv`
-  - `ST2_predictions_cleaned.csv`
+  - `ST1_predictions_cleaned.csv`: Contains predicted hazard and product categories.
+  - `ST2_predictions_cleaned.csv`: Contains predicted hazard and product names.
 
 ## How to Run
 1. Clone this repository and upload it to Google Colab.
@@ -102,6 +102,6 @@ This project is licensed under the GNU General Public License Version 3, 29 June
 - [HuggingFace Transformers](https://huggingface.co/transformers/)
 - [BioBERT](https://github.com/dmis-lab/biobert)
 - [PyTorch](https://pytorch.org/)
-- [ChatGPT](https://openai.com/chatgpt) for assisting with code and documentation development.
+- [ChatGPT](https://openai.com/chatgpt) for providing insights and suggestions during the development of this project.
 
 
