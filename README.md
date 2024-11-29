@@ -62,6 +62,7 @@ The model is configured with the following settings:
    - Save the predictions to CSV files.
 
 ## Data
+- **Note:** For training, the `text` column was used instead of the `title` column, as it provided better predictions. This improvement is likely due to the additional context and detailed information available in the `text` column.
 - **Labeled Training Data:** Contains food-related hazard information and associated categories.
   - URL: `https://raw.githubusercontent.com/food-hazard-detection-semeval-2025/food-hazard-detection-semeval-2025.github.io/refs/heads/main/data/incidents_train.csv`
   - Alternatively, located in the folder `data` as the file `incidents_train.csv`.
