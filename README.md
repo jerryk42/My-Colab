@@ -84,8 +84,8 @@ The performance of the model is evaluated using the F1 Macro score on two tasks:
   - F1 Macro: 0.45
 
 ## Observations
--Task 1 generally performs better due to the well-defined categorical nature of hazard and product categories.
--Task 2 is more challenging, as it involves predicting specific product and hazard names, which may require finer-grained understanding.
+- Task 1 generally performs better due to the well-defined categorical nature of hazard and product categories.
+- Task 2 is more challenging, as it involves predicting specific product and hazard names, which may require finer-grained understanding.
 
 ## How to Run
 1. Clone this repository and upload it to Google Colab.
