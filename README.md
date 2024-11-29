@@ -103,10 +103,10 @@ The model is configured with the following settings:
 This project is licensed under the GNU General Public License Version 3, 29 June 2007. See the LICENSE file for details.
 
 ## Acknowledgments
-- [HuggingFace Transformers](https://huggingface.co/transformers/)
-- [BioBERT](https://github.com/dmis-lab/biobert)
-- [PyTorch](https://pytorch.org/)
-- [ChatGPT](https://openai.com/chatgpt) for providing insights and suggestions during the development of this project.
-- [Stack Overflow](https://stackoverflow.com/)
+- [HuggingFace Transformers](https://huggingface.co/transformers/): For providing pre-trained models and tokenizer utilities that formed the backbone of this project.
+- [BioBERT](https://github.com/dmis-lab/biobert): For offering a domain-specific transformer model optimized for biomedical and text classification tasks.
+- [PyTorch](https://pytorch.org/): For being the core deep learning framework used to implement and train the neural network.
+- [ChatGPT](https://openai.com/chatgpt): For providing insights and suggestions during the development of this project.
+- [Stack Overflow](https://stackoverflow.com/): For being an invaluable resource for resolving coding challenges and gaining technical insights.
 
 
