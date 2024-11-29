@@ -106,5 +106,6 @@ This project is licensed under the GNU General Public License Version 3, 29 June
 - [BioBERT](https://github.com/dmis-lab/biobert)
 - [PyTorch](https://pytorch.org/)
 - [ChatGPT](https://openai.com/chatgpt) for providing insights and suggestions during the development of this project.
+- [Stack Overflow](https://stackoverflow.com/)
 
 
