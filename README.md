@@ -106,6 +106,7 @@ The performance of the model is evaluated using the **F1 Macro** score on two ta
 
 ### Task 2: Hazard and Product Names
 - **F1 Macro:** 0.4714 
+- 11/29/2024 23:26 leaderboard position: 3<sup>rd</sup>
 
 ### Observations
 - Task 1 generally performs better due to the well-defined categorical nature of hazard and product categories.
