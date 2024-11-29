@@ -1,10 +1,29 @@
-# Food Hazard Detection with BioBERT
+# Food Hazard Detection
 
-This repository contains code for a sequence classification model built using BioBERT to detect food-related hazards and categorize them into predefined categories. 
-The solution is built in Python using PyTorch and HuggingFace Transformers.
+This repository contains code for building machine learning models to detect food-related hazards and categorize them into predefined categories. It demonstrates the progression from a basic Support Vector Machine (SVM) model to an advanced BioBERT-based classification system.
+
+## Basic Model Method: SVM
+Support Vector Machines (SVM) were used as the baseline model for this task:
+
+- **Text Encoding**: The `text` column was transformed using TF-IDF (with a maximum of 3,500 features).
+- **Model Training**: Separate SVM classifiers with a linear kernel were trained for each target (`hazard-category`, `product-category`, `hazard`, and `product`).
+- **Performance**: The model achieved reasonable results but was limited by the simplicity of the feature representation and the lack of contextual embeddings.
+
+### Why SVM?
+SVM was chosen as the basic model due to its simplicity and efficiency in handling smaller datasets. While effective for basic classification tasks, its performance is constrained when compared to modern transformer-based methods like BioBERT.
+
+## Advanced Model Method: BioBERT
+The advanced model leverages BioBERT for sequence classification:
+
+- **Deep Learning Framework**: Built with PyTorch and HuggingFace Transformers.
+- **Pre-trained Model**: BioBERT (`dmis-lab/biobert-base-cased-v1.1`) was fine-tuned for this task.
+- **Features**:
+  - Uses BioBERT embeddings for text encoding.
+  - Supports multi-target prediction across hazard and product categories.
+  - Saves predictions for both primary tasks.
 
 ## About
-This repository was created to participate in [SemEval 2025 Task 9: The Food Hazard Detection Challenge](https://food-hazard-detection-semeval-2025.github.io/). The challenge evaluates explainable classification systems for titles of food-incident reports collected from the web. These algorithms aim to assist automated crawlers in identifying and extracting food safety issues from web sources, including social media. Transparency is a crucial aspect of this task due to the potential high economic impact of food hazards. 
+This repository was created to participate in [SemEval 2025 Task 9: The Food Hazard Detection Challenge](https://food-hazard-detection-semeval-2025.github.io/). The challenge evaluates explainable classification systems for titles of food-incident reports collected from the web. These algorithms aim to assist automated crawlers in identifying and extracting food safety issues from web sources, including social media. Transparency is a crucial aspect of this task due to the potential high economic impact of food hazards.
 
 ## Features
 - Uses BioBERT for sequence classification tasks.
@@ -43,7 +62,7 @@ The model is configured with the following settings:
 
 2. **Install Required Libraries:**
    ```bash
-   !pip install torch transformers pandas scikit-learn tqdm
+   pip install torch transformers pandas scikit-learn tqdm
    ```
 
 3. **Load and Preprocess Data:**
@@ -78,15 +97,44 @@ The model is configured with the following settings:
   - `ST2_predictions_cleaned.csv`: Contains predicted hazard and product names.
 
 ## Results
-The performance of the model is evaluated using the F1 Macro score on two tasks:
-- **Task 1: Hazard and Product Categories:**
-  - F1 Macro: 0.7558958415	 
-- **Task 2: Hazard and Product Names:**
-  - F1 Macro: 0.4714
 
-## Observations
+The performance of the model is evaluated using the **F1 Macro** score on two tasks:
+
+### Task 1: Hazard and Product Categories
+- **F1 Macro:** 0.75
+
+### Task 2: Hazard and Product Names
+- **F1 Macro:** 0.45
+
+### Observations
 - Task 1 generally performs better due to the well-defined categorical nature of hazard and product categories.
 - Task 2 is more challenging, as it involves predicting specific product and hazard names, which may require finer-grained understanding.
+
+### Scoring Function
+The F1 Macro score is computed as follows:
+
+```python
+from sklearn.metrics import f1_score
+
+def compute_score(hazards_true, products_true, hazards_pred, products_pred):
+  # Compute F1 for hazards
+  f1_hazards = f1_score(
+    hazards_true,
+    hazards_pred,
+    average='macro'
+  )
+
+  # Compute F1 for products
+  f1_products = f1_score(
+    products_true[hazards_pred == hazards_true],
+    products_pred[hazards_pred == hazards_true],
+    average='macro'
+  )
+
+  return (f1_hazards + f1_products) / 2.
+```
+
+This metric emphasizes the importance of correctly predicting both hazards and products. A perfect score of 1.0 indicates that both hazards and products are entirely accurate, while hazards alone being correct results in a score of 0.5.
 
 ## How to Run
 1. Clone this repository and upload it to Google Colab.
@@ -120,5 +168,4 @@ This project is licensed under the GNU General Public License Version 3, 29 June
 - [PyTorch](https://pytorch.org/): For being the core deep learning framework used to implement and train the neural network.
 - [ChatGPT](https://openai.com/chatgpt): For providing insights and suggestions during the development of this project.
 - [Stack Overflow](https://stackoverflow.com/): For being an invaluable resource for resolving coding challenges and gaining technical insights.
-
 
